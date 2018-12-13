@@ -2,6 +2,7 @@ import { Logger } from 'ts-framework-common';
 import Server, { ServerOptions } from 'ts-framework';
 import StatusController from './controllers/StatusController';
 import UptimeService from './services/UptimeService';
+import MainDatabase from './database';
 
 // Prepare server port
 const port = process.env.PORT as any || 3000;
@@ -20,7 +21,8 @@ export default class MainServer extends Server {
         controllers: { StatusController } 
       },
       children: [
-        UptimeService.getInstance()
+        UptimeService.getInstance(),
+        MainDatabase.getInstance()
       ],
       ...options,
     });
