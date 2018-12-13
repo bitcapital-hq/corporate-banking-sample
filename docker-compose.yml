@@ -1,0 +1,23 @@
+version: '3'
+
+services:
+  postgres:
+    image: postgres
+    restart: always
+    volumes:
+      - postgre-data:/var/lib/postgresql
+    environment:
+      - POSTGRES_USER=ricardo
+      - POSTGRES_PASSWORD=ricardo
+      - POSTGRES_DB=ricardo
+    ports:
+      - 5432:5432
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "ricardo", "-d", "ricardo"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgre-data:
+    driver: local
