@@ -4,17 +4,30 @@
   "main": "dist/start.js",
   "license": "MIT",
   "scripts": {
-    "start": "ts-framework listen",
-    "watch": "ts-framework watch",
+    "start": "ts-framework listen ./api/server.ts",
+    "watch": "ts-framework watch ./api/server.ts",
     "build": "yarn tsc",
     "console": "ts-framework console",
     "test": "jest --config jest.json"
   },
   "dependencies": {
+    "@types/express-fileupload": "^0.4.0",
+    "@types/uuid": "^3.4.4",
+    "bignumber.js": "8.0.1",
+    "bitcapital-core-sdk": "bitcapital-hq/bitcapital-core-sdk",
+    "bluebird": "^3.5.3",
+    "class-validator": "^0.9.1",
+    "cpf": "^1.0.6",
+    "express-fileupload": "^1.1.1-alpha.1",
+    "multer": "^1.4.1",
+    "pg": "^7.7.1",
     "pjson": "^1.0.9",
     "ts-framework": "nxtep-io/ts-framework#v2.3",
     "ts-framework-common": "nxtep-io/ts-framework-common#2.2.0",
-    "ts-framework-sql": "nxtep-io/ts-framework-sql#v2",
+    "ts-framework-maintenance": "nxtep-io/ts-framework-maintenance#0.0.3",
+    "ts-framework-signing": "nxtep-io/ts-framework-signing",
+    "ts-framework-sql": "nxtep-io/ts-framework-sql#2.2.0",
+    "ts-framework-validation": "nxtep-io/ts-framework-validation#v2",
     "ts-node": "^7.0.1"
   },
   "devDependencies": {

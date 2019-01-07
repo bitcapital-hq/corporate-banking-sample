@@ -1,0 +1,1 @@
+export { getBitcapitalAPIClient, authenticateUser } from './ClientConfiguration';
