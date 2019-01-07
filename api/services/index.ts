@@ -5,4 +5,4 @@ export { default as ScheduledTasks } from './ScheduledTasks';
 export { default as UptimeService } from './UptimeService';
 export { default as PersonService } from './PersonService';
 export { default as PayrollService } from './PayrollService'; 
-export { default as BoletoWebService } from './BoletoWebService'; 
+export { default as ExtendedPaymentWebService } from './ExtendedPaymentWebService'; 

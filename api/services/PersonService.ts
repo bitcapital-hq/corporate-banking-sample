@@ -178,6 +178,12 @@ export default class PersonService {
       });
   }
 
+  /**
+   * TODO
+   * Use soft delete
+   * 
+   * @param id the person ID 
+   */
   public async delete(id: string): Promise<DeleteResult> {
     return await this.personRepository.delete(id);
   }

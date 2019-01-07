@@ -1,10 +1,17 @@
-import { Person, PersonType, Boleto, Payment, PaymentType, BoletoStatus, PaymentStatus, Wallet, BankAccount } from "../models";
 import { Repository, getRepository, Brackets } from "../../node_modules/typeorm";
 import Bitcapital, { PaginatedArray, Transaction } from "bitcapital-core-sdk";
 import { getBitcapitalAPIClient } from "../../config";
 import { HttpCode, HttpError } from "../../node_modules/ts-framework";
-import { BoletoWebService, DomainService, PersonService } from ".";
-import ExtendedPaymentWebService from "./ExtendedPaymentWebService";
+import { ExtendedPaymentWebService, DomainService, PersonService } from ".";
+import { 
+    Person, 
+    PersonType, 
+    Boleto, 
+    Payment, 
+    PaymentType, 
+    BoletoStatus, 
+    PaymentStatus, 
+    Wallet } from "../models";
 
 export default class PaymentService {
 
@@ -31,7 +38,8 @@ export default class PaymentService {
     }
 
     public async internalPayment(recipient: Person, amount: string): Promise<Payment> {
-        const accountable = await DomainService.getInstance().findAccountable(recipient.sender.id);
+        const accountable = await DomainService.getInstance()
+        .findAccountable(recipient.sender.id);
         const type = recipient.type == PersonType.EMPLOYEE? 
         PaymentType.EMPLOYEE_PAYMENT:PaymentType.SUPPLIER_PAYMENT;
 
@@ -143,7 +151,7 @@ export default class PaymentService {
             await DomainService.getInstance().findAccountable(domain);
 
             const bitcapital = await getBitcapitalAPIClient();
-            const boletoService = new BoletoWebService({
+            const boletoService = new ExtendedPaymentWebService({
                 session: bitcapital.session(),
                 client: bitcapital.session().options.http.client,
                 clientId: bitcapital.session().options.http.clientId,
@@ -153,7 +161,7 @@ export default class PaymentService {
                 headers: bitcapital.session().options.http.headers,
             });
 
-            const remote = await boletoService.emit({
+            const remote = await boletoService.issueBankSlip({
                 amount: amount,
                 expiresAt: expiresAt
             });
@@ -182,7 +190,7 @@ export default class PaymentService {
             HttpCode.Client.NOT_FOUND);
 
         const bitcapital = await getBitcapitalAPIClient();
-        const boletoService = new BoletoWebService({
+        const boletoService = new ExtendedPaymentWebService({
             session: bitcapital.session(),
             client: bitcapital.session().options.http.client,
             clientId: bitcapital.session().options.http.clientId,
@@ -191,7 +199,7 @@ export default class PaymentService {
             data: bitcapital.session().options.http.data,
             headers: bitcapital.session().options.http.headers,
         });
-        const remote = await boletoService.register(id);
+        const remote = await boletoService.registerBankSlip(id);
 
         boleto.registered = true;
         boleto = await this.boletoRepository.save(boleto);
