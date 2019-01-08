@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, ManyToOne, OneToOne, DeepPartial, JoinColumn, BaseEntity } from "../../node_modules/typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, ManyToOne, OneToOne, DeepPartial, JoinColumn, BaseEntity, BeforeInsert } from "../../node_modules/typeorm";
 import { Company, Wallet, Address, BankAccount, Phone, Document, Salary } from ".";
 import { IsNotEmpty, IsEnum, IsOptional, Validate, ValidationArguments, ValidatorConstraintInterface, ValidatorConstraint } from "../../node_modules/class-validator";
 import * as cpf from "cpf";
@@ -153,6 +153,21 @@ export default class Person extends ExtendedEntity {
     public addDocument(doc: Document): Document[] {
         this.documents.push(doc);
         return this.documents;
+    }
+
+    public addBankAccount(account: BankAccount) {
+        if(account.default) {
+            const current = this.bankAccount.find(account => account.default);
+            current.default = false;
+        }
+    }
+
+    @BeforeInsert()
+    private beforeInsert() {
+        const results = this.bankAccount.filter(account => account.default);
+        if(results.length > 1) {
+            throw new Error("There can not be more than one default bank account");
+        }
     }
 
     public toJSON(): DeepPartial<Person> {

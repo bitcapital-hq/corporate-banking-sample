@@ -5,6 +5,7 @@ import { getRepository } from '../../node_modules/typeorm';
 import TransactionMapper from '../integrations/bitcapital/mappers/TransactionMapper';
 import { Auth } from '../filters';
 import { ExtendedRequest } from "../types/http";
+import { isUUID } from "../helpers";
 
 @Controller('/')
 export default class PaymentController {
@@ -79,7 +80,9 @@ export default class PaymentController {
 
     } catch(error) {
       if(error instanceof HttpError) throw error;
-      throw new HttpError(`Error trying to retrieve transactions: ${error.data.message}`, 
+
+      const message = error.message || error.data && error.data.message;
+      throw new HttpError(`Error trying to retrieve transactions: ${message}`, 
       HttpCode.Server.INTERNAL_SERVER_ERROR);
     }
 
@@ -133,7 +136,9 @@ export default class PaymentController {
 
     } catch(error) {
       if(error instanceof HttpError) throw error;
-      throw new HttpError(`Error performing payment: ${error.data.message}`, 
+
+      const message = error.message || error.data && error.data.message;
+      throw new HttpError(`Error performing payment: ${message}`, 
       HttpCode.Server.INTERNAL_SERVER_ERROR);
     }
 
@@ -152,7 +157,9 @@ export default class PaymentController {
 
     } catch(error) {
       if(error instanceof HttpError) throw error;
-      throw new HttpError(`Error trying to send funds to wallet: ${error.data.message}`, 
+
+      const message = error.message || error.data && error.data.message;
+      throw new HttpError(`Error trying to send funds to wallet: ${message}`, 
       HttpCode.Server.INTERNAL_SERVER_ERROR);
     }
 
@@ -172,7 +179,9 @@ export default class PaymentController {
 
     } catch(error) {
       if(error instanceof HttpError) throw error;
-      throw new HttpError(`Error trying to send funds to wallet: ${error.data.message}`, 
+
+      const message = error.message || error.data && error.data.message;
+      throw new HttpError(`Error trying to send funds to wallet: ${message}`, 
       HttpCode.Server.INTERNAL_SERVER_ERROR);
     }
 
@@ -197,7 +206,9 @@ export default class PaymentController {
   
     } catch(error) {
       if(error instanceof HttpError) throw error;
-      throw new HttpError(`Error trying to issue bank slip: ${error.data.message}`, 
+
+      const message = error.message || error.data && error.data.message;
+      throw new HttpError(`Error trying to issue bank slip: ${message}`, 
       HttpCode.Server.INTERNAL_SERVER_ERROR);
     }
     
@@ -221,7 +232,9 @@ export default class PaymentController {
   
     } catch(error) {
       if(error instanceof HttpError) throw error;
-      throw new HttpError(`Error trying to register bank slip: ${error.data.message}`, 
+
+      const message = error.message || error.data && error.data.message;
+      throw new HttpError(`Error trying to register bank slip: ${message}`, 
       HttpCode.Server.INTERNAL_SERVER_ERROR);
     }
     
@@ -230,22 +243,28 @@ export default class PaymentController {
 
   @Get('/boleto/:id', [Auth.authorize])
   static async findBankSlipById(req: ExtendedRequest, res: BaseResponse) {
-    const { id }: { id: string } = req.body;
+    const { id }: { id: string } = req.params;
     const [ domain, currentUser ] = [ req.core.domain as Company, req.user as Person ];
     
-    const accountable = await DomainService.getInstance().findAccountable(domain.id);
+    const accountable = await DomainService.getInstance()
+    .findAccountable(domain.id);
     if(currentUser.id != accountable.id) {
         throw new HttpError("Only the company's accountable can do this", 
         HttpCode.Client.FORBIDDEN);
     }
 
+    const paymentService = PaymentService.getInstance();
     let bankSlip: Boleto;
     try {
-      bankSlip = await PaymentService.getInstance().findBoletoById(id); 
+        bankSlip = isUUID(id)? 
+          await paymentService.findBoletoById(id):
+          await paymentService.findBoletoByCode(id);
   
     } catch(error) {
       if(error instanceof HttpError) throw error;
-      throw new HttpError(`Error trying to register bank slip: ${error.data.message}`, 
+
+      const message = error.message || error.data && error.data.message;
+      throw new HttpError(`Error finding bank slip: ${message}`, 
       HttpCode.Server.INTERNAL_SERVER_ERROR);
     }
 
@@ -285,7 +304,9 @@ export default class PaymentController {
 
     } catch(error) {
       if(error instanceof HttpError) throw error;
-      throw new HttpError(`Error performing transfer: ${error.data.message}`, 
+
+      const message = error.message || error.data && error.data.message;
+      throw new HttpError(`Error performing transfer: ${message}`, 
       HttpCode.Server.INTERNAL_SERVER_ERROR);
     }
 
@@ -316,8 +337,9 @@ export default class PaymentController {
 
     } catch(error) {
       if(error instanceof HttpError) throw error;
-      console.dir(error.data);
-      throw new HttpError(`Error performing employee payment: ${error.data.message}`, 
+
+      const message = error.message || error.data && error.data.message;
+      throw new HttpError(`Error performing employee payment: ${message}`, 
       HttpCode.Server.INTERNAL_SERVER_ERROR);
     }
     
@@ -340,7 +362,9 @@ export default class PaymentController {
 
     } catch(error) {
       if(error instanceof HttpError) throw error;
-      throw new HttpError(`Error performing employees payment: ${error.data.message}`, 
+
+      const message = error.message || error.data && error.data.message;
+      throw new HttpError(`Error performing employees payment: ${message}`, 
       HttpCode.Server.INTERNAL_SERVER_ERROR);
     }
 

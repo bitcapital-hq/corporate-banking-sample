@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, DeepPartial, CreateDateColumn, UpdateDateColumn } from "../../node_modules/typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, DeepPartial, CreateDateColumn, UpdateDateColumn, Generated } from "../../node_modules/typeorm";
 import { Wallet } from ".";
 import { IsNotEmpty, IsEnum, IsOptional } from "../../node_modules/class-validator";
 
@@ -30,6 +30,18 @@ export default class Boleto {
     @Column({ nullable: false })
     amount: string;
 
+    @IsOptional()
+    @Column({ nullable: true })
+    barcode: string;
+
+    @IsOptional()
+    @Column({ name: "digitable_line", nullable: true })
+    digitableLine: string;
+
+    @Generated() 
+    @Column({ nullable: false })
+    sequential: number;
+
     @CreateDateColumn({ name: "created_at" })
     createdAt: Date;
   
@@ -38,7 +50,7 @@ export default class Boleto {
 
     @IsNotEmpty()
     @Column("timestamp with time zone", { name: "expires_at", nullable: false })
-    expiresAt?: Date;
+    expiresAt: Date;
 
     @IsNotEmpty()
     @Column({ default: false, nullable: false })
@@ -72,6 +84,8 @@ export default class Boleto {
             updatedAt: this.updatedAt,
             paidAt: this.paidAt || "",
             registered: this.registered,
+            digitableLine: this.digitableLine,
+            barcode: this.barcode,
             status: this.status
         };
       }

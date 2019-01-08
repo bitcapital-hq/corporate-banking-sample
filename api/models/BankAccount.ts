@@ -25,7 +25,7 @@ export default class BankAccount {
     branch: string;
 
     @IsNotEmpty()
-    @Column({ name: "branch_digit", nullable: true })
+    @Column({ name: "branch_digit", nullable: false })
     branchDigit: string;
 
     @IsNotEmpty()
@@ -33,8 +33,16 @@ export default class BankAccount {
     number: string;
 
     @IsNotEmpty()
-    @Column({ nullable: true })
+    @Column({ nullable: false })
     digit: string;
+
+    @IsOptional()
+    @Column({ nullable: true })
+    collectionWallet?: string;
+
+    @IsNotEmpty()
+    @Column({ default: true, nullable: true })
+    default: boolean = true;
 
     constructor(data: Partial<BankAccount> = {}) {
         Object.assign(this, data);
@@ -47,7 +55,9 @@ export default class BankAccount {
             branch: this.branch,
             branchDigit: this.branchDigit,
             number: this.number,
-            digit: this.digit            
+            digit: this.digit,
+            collectionWallet: this.collectionWallet || "",
+            default: this.default
         };
       }
 }

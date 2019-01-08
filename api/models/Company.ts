@@ -28,6 +28,10 @@ export default class Company {
     @JoinColumn()
     accountable: Accountable;
 
+    @IsOptional()
+    @Column({ nullable: true })
+    ein: string;
+    
     @IsNotEmpty()
     @Column({ nullable: false })
     name: string;
@@ -71,6 +75,7 @@ export default class Company {
             id: this.id,
             externalId: this.externalId,
             name: this.name,
+            ein: this.ein,
             status: this.status
         };
     }

@@ -13,6 +13,7 @@ import {
     PaymentStatus, 
     Wallet, 
     Company} from "../models";
+import { boletoGenerator } from "../helpers";
 
 export default class PaymentService {
 
@@ -152,16 +153,19 @@ export default class PaymentService {
     }
 
     public async emitBankSlip(
-        domain: string, 
+        domainId: string, 
         expiresAt: Date, 
         amount: string,
         recipient?: Person): Promise<Boleto> {
         
+        const domainService = DomainService.getInstance();
+        const domain = await domainService.findById(domainId);
+
         let boleto: Boleto;
         try {
             recipient = recipient? 
             await PersonService.getInstance().findById(recipient.id):
-            await DomainService.getInstance().findAccountable(domain);
+            await domainService.findAccountable(domainId);
 
             const bitcapital = await getBitcapitalAPIClient();
             const boletoService = new ExtendedPaymentWebService({
@@ -183,13 +187,20 @@ export default class PaymentService {
                 externalId: remote.id,
                 recipient: recipient.wallet,
                 expiresAt: expiresAt,
-                amount: parseFloat(amount).toFixed(6)
+                amount: parseFloat(amount).toFixed(2)
             });
             boleto = await this.boletoRepository.save(boleto);
 
+            const generated = await boletoGenerator(domain, boleto);
+            boleto.digitableLine = (generated['linha_digitavel'] as string).replace(/\D/g, "");
+            boleto.barcode = generated['barcode_data'];
+            await this.boletoRepository.save(boleto);
+
         } catch(error) {
-            console.dir(error);
-            throw new Error(`Error trying to deposit into mediator account`);
+            if(error instanceof HttpError) throw error;
+
+            const message = error.message || error.data && error.data.message;
+            throw new Error(`Error trying to deposit into mediator account: ${message}`);
         }
 
         return boleto;
@@ -350,6 +361,15 @@ export default class PaymentService {
             where: { id: id },
             relations: ["recipient"] 
         });
+    }
+
+    public async findBoletoByCode(code: string): Promise<Boleto> {
+        return await this.boletoRepository
+        .createQueryBuilder("boleto")
+        .innerJoinAndSelect("boleto.recipient", "recipient")
+        .where("boleto.digitableLine = :digitableLine", { digitableLine: code })
+        .orWhere("boleto.barcode = :barcode", { barcode: code })
+        .getOne();
     }
 
     public async findBoletoByStatus(
