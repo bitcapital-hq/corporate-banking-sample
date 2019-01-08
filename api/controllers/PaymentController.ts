@@ -145,15 +145,10 @@ export default class PaymentController {
     const { amount }: { amount: string } = req.body;
     const [ domain, currentUser ] = [ req.core.domain as Company, req.user as Person ];
 
-    const accountable = await DomainService.getInstance().findAccountable(domain.id);
-    if(currentUser.id != accountable.id) {
-        throw new HttpError("Only the company's accountable can do this", 
-        HttpCode.Client.FORBIDDEN);
-    }
-
     let payment: Payment;
     try {
-      payment = await PaymentService.getInstance().deposit(domain.id, amount); 
+      payment = await PaymentService.getInstance()
+      .deposit(amount, domain.id, currentUser); 
 
     } catch(error) {
       if(error instanceof HttpError) throw error;
@@ -173,7 +168,7 @@ export default class PaymentController {
     let result: string;
     try {
       result = await PaymentService.getInstance()
-      .withdraw(currentUser, amount, bankingId, description); 
+      .withdraw(currentUser, amount, bankingId, description);
 
     } catch(error) {
       if(error instanceof HttpError) throw error;
@@ -204,6 +199,59 @@ export default class PaymentController {
       if(error instanceof HttpError) throw error;
       throw new HttpError(`Error trying to issue bank slip: ${error.data.message}`, 
       HttpCode.Server.INTERNAL_SERVER_ERROR);
+    }
+    
+    return res.success( bankSlip.toJSON() );
+  }
+
+  @Post('/boleto/:id/register', [Auth.authorize])
+  static async registerBankSlip(req: ExtendedRequest, res: BaseResponse) {
+    const { id }: { id: string } = req.body;
+    const [ domain, currentUser ] = [ req.core.domain as Company, req.user as Person ];
+    
+    const accountable = await DomainService.getInstance().findAccountable(domain.id);
+    if(currentUser.id != accountable.id) {
+        throw new HttpError("Only the company's accountable can do this", 
+        HttpCode.Client.FORBIDDEN);
+    }
+
+    let bankSlip: Boleto;
+    try {
+      bankSlip = await PaymentService.getInstance().registerBankSlip(id); 
+  
+    } catch(error) {
+      if(error instanceof HttpError) throw error;
+      throw new HttpError(`Error trying to register bank slip: ${error.data.message}`, 
+      HttpCode.Server.INTERNAL_SERVER_ERROR);
+    }
+    
+    return res.success( bankSlip.toJSON() );
+  }
+
+  @Get('/boleto/:id', [Auth.authorize])
+  static async findBankSlipById(req: ExtendedRequest, res: BaseResponse) {
+    const { id }: { id: string } = req.body;
+    const [ domain, currentUser ] = [ req.core.domain as Company, req.user as Person ];
+    
+    const accountable = await DomainService.getInstance().findAccountable(domain.id);
+    if(currentUser.id != accountable.id) {
+        throw new HttpError("Only the company's accountable can do this", 
+        HttpCode.Client.FORBIDDEN);
+    }
+
+    let bankSlip: Boleto;
+    try {
+      bankSlip = await PaymentService.getInstance().findBoletoById(id); 
+  
+    } catch(error) {
+      if(error instanceof HttpError) throw error;
+      throw new HttpError(`Error trying to register bank slip: ${error.data.message}`, 
+      HttpCode.Server.INTERNAL_SERVER_ERROR);
+    }
+
+    if(!bankSlip) {
+      throw new HttpError("There is no bank slip with the given identifier", 
+      HttpCode.Client.NOT_FOUND);
     }
     
     return res.success( bankSlip.toJSON() );

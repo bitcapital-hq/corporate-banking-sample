@@ -11,7 +11,8 @@ import {
     PaymentType, 
     BoletoStatus, 
     PaymentStatus, 
-    Wallet } from "../models";
+    Wallet, 
+    Company} from "../models";
 
 export default class PaymentService {
 
@@ -60,8 +61,8 @@ export default class PaymentService {
         // TODO check account and wallet status before continue
         const bitcapital = await getBitcapitalAPIClient();
         const senderWallet = await bitcapital.wallets().findOne(sender.wallet.externalId);
-        const walletBalance = senderWallet.balances.filter(wallet => 
-            wallet.asset_code == PaymentService.ROOT_ASSET).pop();
+        const walletBalance = senderWallet.balances.find(wallet => 
+            wallet.asset_code == PaymentService.ROOT_ASSET);
 
         if(!walletBalance.balance || walletBalance.balance < parseFloat(amount))
             throw new HttpError("Payment failed due to lack of funds", 
@@ -87,10 +88,12 @@ export default class PaymentService {
         return payment;
     }
 
-    public async deposit(domain: string, amount: string): Promise<Payment> {
+    public async deposit(amount: string, domain: Company | string, recipient?: Person): 
+    Promise<Payment> {
         let payment: Payment;
         try {
-            const accountable = await DomainService.getInstance().findAccountable(domain);
+            const accountable = await DomainService.getInstance()
+            .findAccountable(typeof domain === 'string'? domain:domain.id);
 
             const bitcapital = await getBitcapitalAPIClient();
             const remotePayment = await bitcapital.assets().emit({ 
@@ -107,9 +110,19 @@ export default class PaymentService {
             });
             payment = await this.paymentRepository.save(payment);
 
+            if(recipient && recipient.id != accountable.id) {
+                payment = await this.payment(
+                    accountable, 
+                    recipient, 
+                    amount, 
+                    PaymentType.DEPOSIT);
+            }
+
         } catch(error) {
-            console.dir(error);
-            throw new Error(`Error trying to deposit into mediator account`);
+            if(error instanceof HttpError) throw error;
+
+            const message = error.message || error.data && error.data.message;
+            throw new Error(`Error trying to deposit into mediator account: ${message}`);
         }
 
         return payment;
@@ -220,8 +233,8 @@ export default class PaymentService {
 
         const bitcapital = await getBitcapitalAPIClient();
         const recipientWallet = await bitcapital.wallets().findOne(recipient.wallet.externalId);
-        const walletBalance = recipientWallet.balances.filter(wallet => 
-            wallet.asset_code == PaymentService.ROOT_ASSET).pop();
+        const walletBalance = recipientWallet.balances.find(wallet => 
+            wallet.asset_code == PaymentService.ROOT_ASSET);
 
         if(!walletBalance.balance || walletBalance.balance < parseFloat(amount)) {
             throw new HttpError("Payment failed due to lack of funds", 
