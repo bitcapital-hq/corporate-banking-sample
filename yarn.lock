@@ -1487,6 +1487,11 @@ ee-first@1.1.1:
   version "1.1.1"
   resolved "https://registry.yarnpkg.com/ee-first/-/ee-first-1.1.1.tgz#590c61156b0ae2f4f0255732a158b266bc56b21d"
 
+ejs@2.5.5:
+  version "2.5.5"
+  resolved "https://registry.yarnpkg.com/ejs/-/ejs-2.5.5.tgz#6ef4e954ea7dcf54f66aad2fe7aa421932d9ed77"
+  integrity sha1-bvTpVOp9z1T2aq0v56pCGTLZ7Xc=
+
 ejs@^2.5.9:
   version "2.6.1"
   resolved "https://registry.yarnpkg.com/ejs/-/ejs-2.6.1.tgz#498ec0d495655abc6f23cd61868d926464071aa0"
@@ -3631,6 +3636,13 @@ nice-try@^1.0.4:
 nocache@2.0.0:
   version "2.0.0"
   resolved "https://registry.yarnpkg.com/nocache/-/nocache-2.0.0.tgz#202b48021a0c4cbde2df80de15a17443c8b43980"
+
+node-boleto@^2.0.6:
+  version "2.0.6"
+  resolved "https://registry.yarnpkg.com/node-boleto/-/node-boleto-2.0.6.tgz#1172a67341463078c1a284e204919a065eefca3e"
+  integrity sha512-T/63cQoGfLZuDUjXMCTOqwLusRZmMKYLZXh6uNvXClthy/6iqB3yPuuYpx3qw1vo6C2txVRyX/ElOMi+00Peeg==
+  dependencies:
+    ejs "2.5.5"
 
 node-int64@^0.4.0:
   version "0.4.0"
