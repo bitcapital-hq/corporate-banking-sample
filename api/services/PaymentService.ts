@@ -1,6 +1,6 @@
 import { Repository, getRepository, Brackets } from "../../node_modules/typeorm";
 import Bitcapital, { PaginatedArray, Transaction } from "bitcapital-core-sdk";
-import { getBitcapitalAPIClient } from "../../config";
+import { default as BitCapital } from "../BitCapital";
 import { HttpCode, HttpError } from "../../node_modules/ts-framework";
 import { ExtendedPaymentWebService, DomainService, PersonService } from ".";
 import { 
@@ -14,28 +14,41 @@ import {
     Wallet, 
     Company} from "../models";
 import { boletoGenerator } from "../helpers";
+import { LoggerInstance } from "ts-framework-common";
+
+export interface PaymentServiceOptions {
+    logger: LoggerInstance;
+}
 
 export default class PaymentService {
 
+    private logger: LoggerInstance;
     private static ROOT_ASSET = "BRLD";
     private static instance: PaymentService;
 
     private paymentRepository: Repository<Payment>;
     private boletoRepository: Repository<Boleto>;
 
-    private bitcapital: Bitcapital;
+    private bitcapitalClient: Bitcapital;
 
-    constructor() {
+    constructor(options: PaymentServiceOptions) {
+        this.logger = options.logger;
+        this.bitcapitalClient = BitCapital.getInstance().getClient();
         this.paymentRepository = getRepository(Payment); 
         this.boletoRepository = getRepository(Boleto);
     }
 
-    private static initialize() {
-        PaymentService.instance = new PaymentService();
+    public static initialize(options: PaymentServiceOptions) {
+        if(!PaymentService.instance) {
+            PaymentService.instance = new PaymentService(options);
+        }
+        return PaymentService.instance;
     }
 
     public static getInstance() {
-        if(!PaymentService.instance) this.initialize();
+        if(!PaymentService.instance) {
+            throw new Error("PaymentService instance not initialized!");
+        }
         return PaymentService.instance;
     }
 
@@ -59,32 +72,40 @@ export default class PaymentService {
         sender = await personService.findById(sender.id);
         recipient = await personService.findById(recipient.id);
 
-        // TODO check account and wallet status before continue
-        const bitcapital = await getBitcapitalAPIClient();
-        const senderWallet = await bitcapital.wallets().findOne(sender.wallet.externalId);
-        const walletBalance = senderWallet.balances.find(wallet => 
-            wallet.asset_code == PaymentService.ROOT_ASSET);
+        let payment: Payment;
+        try {
+            // TODO check account and wallet status before continue
+            const senderWallet = await this.bitcapitalClient
+            .wallets().findOne(sender.wallet.externalId);
+            const walletBalance = senderWallet.balances.find(wallet => 
+                wallet.asset_code == PaymentService.ROOT_ASSET);
 
-        if(!walletBalance.balance || walletBalance.balance < parseFloat(amount))
-            throw new HttpError("Payment failed due to lack of funds", 
-            HttpCode.Client.BAD_REQUEST);
+            if(!walletBalance.balance || walletBalance.balance < parseFloat(amount))
+                throw new HttpError("Payment failed due to lack of funds", 
+                HttpCode.Client.BAD_REQUEST);
 
-        const remotePayment = await bitcapital.payments().pay({
-            source: sender.wallet.externalId,
-            recipients: [{
-                amount: parseFloat(amount).toFixed(6),
-                destination: recipient.wallet.externalId
-            }]
-        });
+            const remotePayment = await this.bitcapitalClient.payments().pay({
+                source: sender.wallet.externalId,
+                recipients: [{
+                    amount: amount,
+                    destination: recipient.wallet.externalId
+                }]
+            });
 
-        const payment = new Payment({
-            type: type = type? type:PaymentType.TRANSFER,
-            externalId: remotePayment.id,
-            sender: sender.wallet,
-            recipient: recipient.wallet,
-            amount: amount,
-        });
-        await this.paymentRepository.save(payment);
+            payment = new Payment({
+                type: type || PaymentType.TRANSFER,
+                externalId: remotePayment.id,
+                sender: sender.wallet,
+                recipient: recipient.wallet,
+                amount: amount,
+            });
+            await this.paymentRepository.save(payment);
+
+        } catch(error) {
+            const message = error.message || error.data && error.data.message;
+            this.logger.error(`Error executing payment: ${message}`, payment && payment.toJSON(), error);
+            throw error;
+        }
 
         return payment;
     }
@@ -96,8 +117,7 @@ export default class PaymentService {
             const accountable = await DomainService.getInstance()
             .findAccountable(typeof domain === 'string'? domain:domain.id);
 
-            const bitcapital = await getBitcapitalAPIClient();
-            const remotePayment = await bitcapital.assets().emit({ 
+            const remotePayment = await this.bitcapitalClient.assets().emit({ 
                 id: PaymentService.ROOT_ASSET,  
                 amount: parseFloat(amount).toFixed(6)
             });
@@ -120,10 +140,9 @@ export default class PaymentService {
             }
 
         } catch(error) {
-            if(error instanceof HttpError) throw error;
-
             const message = error.message || error.data && error.data.message;
-            throw new Error(`Error trying to deposit into mediator account: ${message}`);
+            this.logger.error(`Error trying to deposit into mediator account: ${message}`, payment && payment.toJSON(), error);
+            throw error;
         }
 
         return payment;
@@ -134,22 +153,30 @@ export default class PaymentService {
         offset: number,
         limit: number): Promise<PaginatedArray<Transaction>> {
 
-        let remoteWalletId; 
-        if(typeof wallet === 'string') { 
-            const localWallet = await getRepository(Wallet)
-            .findOneOrFail({ where: { id: wallet } });
-            remoteWalletId = localWallet.externalId;
-        } else {
-            remoteWalletId = wallet.externalId;
+        let transactions: PaginatedArray<Transaction>;
+        try { 
+            let remoteWalletId; 
+            if(typeof wallet === 'string') { 
+                const localWallet = await getRepository(Wallet)
+                .findOneOrFail({ where: { id: wallet } });
+                remoteWalletId = localWallet.externalId;
+            } else {
+                remoteWalletId = wallet.externalId;
+            }
+
+            await this.bitcapitalClient
+                .wallets()
+                .findWalletTransactions(
+                    remoteWalletId, 
+                    { limit: limit, skip: offset }
+                );
+        } catch(error) {
+            const message = error.message || error.data && error.data.message;
+            this.logger.error(`Error retrieving transactions of wallet: ${typeof wallet === 'string'? wallet:wallet.id}`, error);
+            throw error;
         }
 
-        const bitcapital = await getBitcapitalAPIClient();
-        return await bitcapital
-            .wallets()
-            .findWalletTransactions(
-                remoteWalletId, 
-                { limit: limit, skip: offset }
-            );
+        return transactions;
     }
 
     public async emitBankSlip(
@@ -167,15 +194,15 @@ export default class PaymentService {
             await PersonService.getInstance().findById(recipient.id):
             await domainService.findAccountable(domainId);
 
-            const bitcapital = await getBitcapitalAPIClient();
+            const session = this.bitcapitalClient.session();
             const boletoService = new ExtendedPaymentWebService({
-                session: bitcapital.session(),
-                client: bitcapital.session().options.http.client,
-                clientId: bitcapital.session().options.http.clientId,
-                clientSecret: bitcapital.session().options.http.clientSecret,
-                baseURL: bitcapital.session().options.http.baseURL,
-                data: bitcapital.session().options.http.data,
-                headers: bitcapital.session().options.http.headers,
+                session: session,
+                client: session.options.http.client,
+                clientId: session.options.http.clientId,
+                clientSecret: session.options.http.clientSecret,
+                baseURL: session.options.http.baseURL,
+                data: session.options.http.data,
+                headers: session.options.http.headers,
             });
 
             const remote = await boletoService.issueBankSlip({
@@ -197,10 +224,10 @@ export default class PaymentService {
             await this.boletoRepository.save(boleto);
 
         } catch(error) {
-            if(error instanceof HttpError) throw error;
-
+            console.dir(error);
             const message = error.message || error.data && error.data.message;
-            throw new Error(`Error trying to deposit into mediator account: ${message}`);
+            this.logger.error(`Error trying to issue bank slip: ${message}`, boleto && boleto.toJSON(), error);
+            throw error;
         }
 
         return boleto;
@@ -213,20 +240,28 @@ export default class PaymentService {
             throw new HttpError(`There is no boleto with the given id ${id}`,
             HttpCode.Client.NOT_FOUND);
 
-        const bitcapital = await getBitcapitalAPIClient();
-        const boletoService = new ExtendedPaymentWebService({
-            session: bitcapital.session(),
-            client: bitcapital.session().options.http.client,
-            clientId: bitcapital.session().options.http.clientId,
-            clientSecret: bitcapital.session().options.http.clientSecret,
-            baseURL: bitcapital.session().options.http.baseURL,
-            data: bitcapital.session().options.http.data,
-            headers: bitcapital.session().options.http.headers,
-        });
-        const remote = await boletoService.registerBankSlip(id);
+        try {
+            const session = this.bitcapitalClient.session();
+            const boletoService = new ExtendedPaymentWebService({
+                session: session,
+                client: session.options.http.client,
+                clientId: session.options.http.clientId,
+                clientSecret: session.options.http.clientSecret,
+                baseURL: session.options.http.baseURL,
+                data: session.options.http.data,
+                headers: session.options.http.headers,
+            });
+            const remote = await boletoService.registerBankSlip(id);
 
-        boleto.registered = true;
-        boleto = await this.boletoRepository.save(boleto);
+            boleto.registered = true;
+            await this.boletoRepository.save(boleto);
+
+        } catch(error) {
+            const message = error.message || error.data && error.data.message;
+            this.logger
+            .error(`Error registering bank slip: ${message}`, boleto && boleto.toJSON(), error);
+            throw error;
+        }
 
         return boleto;
     }
@@ -238,44 +273,56 @@ export default class PaymentService {
      * @param amount 
      * @param description 
      */
-    public async withdraw(recipient: Person, bankingId: string, amount: string, description: string): 
-    Promise<string> {
+    public async withdraw(
+        recipient: Person, 
+        bankingId: string, 
+        amount: string, 
+        description: string): Promise<string> {
+
         recipient = await PersonService.getInstance().findById(recipient.id);
+        let result: string;
+        try {
+            const recipientWallet = await this.bitcapitalClient
+            .wallets().findOne(recipient.wallet.externalId);
+            const walletBalance = recipientWallet.balances.find(wallet => 
+                wallet.asset_code == PaymentService.ROOT_ASSET);
 
-        const bitcapital = await getBitcapitalAPIClient();
-        const recipientWallet = await bitcapital.wallets().findOne(recipient.wallet.externalId);
-        const walletBalance = recipientWallet.balances.find(wallet => 
-            wallet.asset_code == PaymentService.ROOT_ASSET);
+            if(!walletBalance.balance || walletBalance.balance < parseFloat(amount)) {
+                throw new HttpError("Payment failed due to lack of funds", 
+                HttpCode.Client.BAD_REQUEST);
+            }
 
-        if(!walletBalance.balance || walletBalance.balance < parseFloat(amount)) {
-            throw new HttpError("Payment failed due to lack of funds", 
-            HttpCode.Client.BAD_REQUEST);
+            const bankAccount = recipient.bankAccount
+            .find(bankAccount => bankAccount.id == bankingId);
+            if(!bankAccount) {
+                throw new HttpError("There is no bank account with the given id", 
+                HttpCode.Client.NOT_FOUND);
+            }
+            const remoteBankingId = bankAccount.externalId;
+            
+            const session = this.bitcapitalClient.session();
+            const paymentAPIClient = new ExtendedPaymentWebService({
+                session: session,
+                client: session.options.http.client,
+                clientId: session.options.http.clientId,
+                clientSecret: session.options.http.clientSecret,
+                baseURL: session.options.http.baseURL,
+                data: session.options.http.data,
+                headers: session.options.http.headers,
+            });
+
+            result = await paymentAPIClient
+            .withdraw({
+                bankingId: remoteBankingId,
+                amount: parseFloat(amount),
+                description: description
+            });
+
+        } catch(error) {
+            const message = error.message || error.data && error.data.message;
+            this.logger.error(`Error executing withdraw: ${message}`, error);
+            throw error;
         }
-
-        const bankAccount = recipient.bankAccount
-        .find(bankAccount => bankAccount.id == bankingId);
-        if(!bankAccount) {
-            throw new HttpError("There is no bank account with the given id", 
-            HttpCode.Client.NOT_FOUND);
-        }
-        const remoteBankingId = bankAccount.externalId;
-         
-        const paymentAPIClient = new ExtendedPaymentWebService({
-            session: bitcapital.session(),
-            client: bitcapital.session().options.http.client,
-            clientId: bitcapital.session().options.http.clientId,
-            clientSecret: bitcapital.session().options.http.clientSecret,
-            baseURL: bitcapital.session().options.http.baseURL,
-            data: bitcapital.session().options.http.data,
-            headers: bitcapital.session().options.http.headers,
-        });
-
-        const result = await paymentAPIClient
-        .withdraw({
-            bankingId: remoteBankingId,
-            amount: parseFloat(amount),
-            description: description
-        });
 
         return result;
     }
@@ -340,18 +387,19 @@ export default class PaymentService {
             .orWhere("sender.id  = :id", { id: walletId })
         }));
 
-        if(filters.after) {
-            qb = qb.andWhere("createdAt >= :date", { date: filters.after })
-        }
-    
-        if(filters.before) {
-            qb = qb.andWhere("createdAt <= :date", { date: filters.before })
+        if(filters.after && filters.before) {
+            qb = qb.andWhere("created_at BETWEEN :after AND :before", 
+                            { after: filters.after, before: filters.before });
+        } else if(filters.after) {
+            qb = qb.andWhere("created_at >= :date", { date: filters.after });
+        } else if(filters.before) {
+            qb = qb.andWhere("created_at <= :date", { date: filters.before });
         }
             
         return await qb
             .offset(offset)
             .limit(limit)
-            .orderBy("createdAt", "ASC")
+            .orderBy("created_at", "ASC")
             .getManyAndCount();
     }
 

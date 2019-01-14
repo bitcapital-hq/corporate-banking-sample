@@ -11,7 +11,7 @@ export default class DomainController {
 
         const domain = await DomainService.getInstance().createDomain(domainData);
 
-        return res.success(JSON.stringify(domain));
+        return res.success(domain.toSimpleJSON());
     }  
 
     @Post("/:id/mediators")

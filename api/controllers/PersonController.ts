@@ -132,7 +132,8 @@ export default class PersonController {
         } catch(error) {
             if(error instanceof HttpError) throw error;
 
-            throw new HttpError(`Error saving document: ${error.data.message}`, 
+            const message = error.message || error.data && error.data.message;
+            throw new HttpError(`Error saving document: ${message}`, 
             HttpCode.Server.INTERNAL_SERVER_ERROR);
         }
 
@@ -160,7 +161,8 @@ export default class PersonController {
         } catch(error) {
             if(error instanceof HttpError) throw error;
 
-            throw new HttpError("Error retrieving document status",
+            const message = error.message || error.data && error.data.message;
+            throw new HttpError(`Error retrieving document status: ${message}`,
             HttpCode.Server.INTERNAL_SERVER_ERROR);
         }
 

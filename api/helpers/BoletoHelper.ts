@@ -1,7 +1,6 @@
 import { Company, Boleto } from "../models";
 import { DomainService } from "../services";
-
-const PagarmeBoleto = require('node-boleto').Boleto;
+import { Boleto as PagarmeBoleto } from "node-boleto";
 
 export async function boletoGenerator(domain: Company, boletoData: Boleto) {
 

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, BaseRequest, BaseResponse, HttpError, HttpCode } from 'ts-framework';
+import { Controller, Post, BaseRequest, BaseResponse } from 'ts-framework';
 import { AuthService } from '../services';
 
 @Controller('/')

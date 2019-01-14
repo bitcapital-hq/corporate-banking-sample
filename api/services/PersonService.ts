@@ -1,11 +1,19 @@
-import Bitcapital, { User, Recipient } from "bitcapital-core-sdk";
+import Bitcapital, { User } from "bitcapital-core-sdk";
 import { Person, PersonType, Wallet, Company, Document, DocumentStatus, PersonStatus } from "../models";
 import { DeleteResult, getRepository, Repository } from "../../node_modules/typeorm";
-import { getBitcapitalAPIClient } from "../../config";
+import { default as BitCapital } from "../BitCapital";
 import PersonMapper from "../integrations/bitcapital/mappers/PersonMapper";
 import DomainService from "./DomainService";
+import { Logger, LoggerInstance } from "ts-framework-common";
+
+export interface PersonServiceOptions {
+  logger: LoggerInstance;
+}
 
 export default class PersonService {
+
+  //private static logger = Logger.getInstance();
+  private logger: LoggerInstance;
 
   private static ROOT_ASSET = "BRLD";
   private static instance: PersonService;
@@ -13,21 +21,25 @@ export default class PersonService {
   private personRepository: Repository<Person>;
   private domainRepository: Repository<Company>;
   private personMapper: PersonMapper;
-  private bitcapital: Bitcapital;
+  private bitcapitalClient: Bitcapital;
   
-  constructor() {
+  constructor(options: PersonServiceOptions) {
+    this.logger = options.logger;
+    this.bitcapitalClient = BitCapital.getInstance().getClient();
     this.personRepository = getRepository(Person);
     this.domainRepository = getRepository(Company);
     this.personMapper = new PersonMapper();
   }
 
-  public static initialize() {
-    if(!PersonService.instance)
-      PersonService.instance = new PersonService();
+  public static initialize(options: PersonServiceOptions) {
+    PersonService.instance = new PersonService(options);
+    return PersonService.instance;
   }
 
   public static getInstance() {
-    PersonService.initialize();
+    if(!PersonService.instance) {
+      throw new Error("PersonService instance not initialized!");
+    }
     return PersonService.instance;
   }
 
@@ -39,8 +51,7 @@ export default class PersonService {
       await person.savePassword(password);
 
       if(person.type != PersonType.ACCOUNTABLE) {
-        this.bitcapital = await getBitcapitalAPIClient();
-        const user: User = await this.bitcapital.consumers()
+        const user: User = await this.bitcapitalClient.consumers()
         .create(this.personMapper.fromPersonToUser(person, domain));
 
         person.externalId = user.id;
@@ -57,8 +68,9 @@ export default class PersonService {
       }
 
     } catch(error) {
-      console.dir(error);
-      throw new Error(`Erro ao cadastrar usuário: ${error.toString()}`);
+      const message = error.message || error.data && error.data.message;
+      this.logger.error(`Error creating person: ${message}`, person.toSimpleJSON(), error);
+      throw error;
     }
     
     return this.findByEmail(person.email);
@@ -68,49 +80,62 @@ export default class PersonService {
   Promise<Person> {
     person = await this.findById(person.id);
 
-    this.bitcapital = await getBitcapitalAPIClient();
-    const remotePerson = await this.bitcapital
-      .consumers()
-      .findOne(person.externalId);
-      
-    const uploadedDoc = await this.bitcapital
-      .consumers()
-      .createDocument(
-        person.externalId,
-        {
-          type: PersonMapper.toRemoteDocType(doc.type),
-          number: doc.number,
-          front: doc.front,
-          back: doc.back
-        } 
-      );
+    try {
+      const remotePerson = await this.bitcapitalClient
+        .consumers()
+        .findOne(person.externalId);
+        
+      const uploadedDoc = await this.bitcapitalClient
+        .consumers()
+        .createDocument(
+          person.externalId,
+          {
+            type: PersonMapper.toRemoteDocType(doc.type),
+            number: doc.number,
+            front: doc.front,
+            back: doc.back
+          } 
+        );
 
-    doc.externalId = uploadedDoc.id;
-    person.addDocument(doc);
-    
-    return await this.personRepository.save(person);
+      doc.externalId = uploadedDoc.id;
+      person.addDocument(doc);
+      await this.personRepository.save(person);
+
+    } catch(error) {
+      const message = error.message || error.data && error.data.message;
+      this.logger.error(`Error associating new document to person (${person.id}) record: ${message}`, doc && doc.toJSON(), error);
+      throw error;
+    }
+        
+    return person;
   }
 
   public async checkPersonDocumentsStatus(person: Person): Promise<Document[]> {
     person = await this.findById(person.id);
     const personDocs: Document[] = person.documents;
-  
-    this.bitcapital = await getBitcapitalAPIClient();
-    const uploadedDocs = await this.bitcapital.consumers()
-    .findDocumentsById(person.externalId);
 
-    uploadedDocs.forEach(uploadedDoc => {
-      if(uploadedDoc.isValid()) {
-        const personDoc = personDocs.find(doc => 
-          doc.externalId == uploadedDoc.id
-          && doc.status != DocumentStatus.VERIFIED);
-          
-        if(personDoc) 
-          personDoc.status = DocumentStatus.VERIFIED;
-        } 
-    });
-    await this.personRepository.save(person);
-  
+    try {
+      const uploadedDocs = await this.bitcapitalClient.consumers()
+      .findDocumentsById(person.externalId);
+
+      uploadedDocs.forEach(uploadedDoc => {
+        if(uploadedDoc.isValid()) {
+          const personDoc = personDocs.find(doc => 
+            doc.externalId == uploadedDoc.id
+            && doc.status != DocumentStatus.VERIFIED);
+            
+          if(personDoc) 
+            personDoc.status = DocumentStatus.VERIFIED;
+          } 
+      });
+      await this.personRepository.save(person);
+
+    } catch(error) {
+      const message = error.message || error.data && error.data.message;
+      this.logger.error(`Error retrieving/updating person documents: ${message}`, person.toSimpleJSON(), error);
+      throw error;
+    }
+
     return person.documents;
   }
 
@@ -121,13 +146,22 @@ export default class PersonService {
    */
   public async checkBalance(person: Person): Promise<string> {
 
-    this.bitcapital = await getBitcapitalAPIClient();
-    const personWallet = await this.bitcapital.wallets()
-    .findOne(person.wallet.externalId);
-    const walletBalance = personWallet.balances.filter(balance => 
-      balance.asset_code == PersonService.ROOT_ASSET).pop();
+    let balance: string;
+    try {
+      const personWallet = await this.bitcapitalClient
+        .wallets()
+        .findOne(person.wallet.externalId);
+      const walletBalance = personWallet.balances
+        .find(balance => balance.asset_code == PersonService.ROOT_ASSET);
+      balance = Number(walletBalance.balance).toFixed(2);
 
-    return walletBalance.balance.toFixed(2);
+    } catch(error) {
+      const message = error.message || error.data && error.data.message;
+      this.logger.error(`Error retrieving person account balance: ${message}`, `person ID: ${person.id}`, error);
+      throw error;
+    }
+  
+    return balance;
   }
 
   public async findById(id: string): Promise<Person> {

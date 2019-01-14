@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany, ManyToOne, OneToOne, DeepPartial, JoinColumn, BaseEntity, BeforeInsert } from "../../node_modules/typeorm";
 import { Company, Wallet, Address, BankAccount, Phone, Document, Salary } from ".";
-import { IsNotEmpty, IsEnum, IsOptional, Validate, ValidationArguments, ValidatorConstraintInterface, ValidatorConstraint } from "../../node_modules/class-validator";
+import { IsNotEmpty, IsEnum, IsOptional, Validate, ValidationArguments, ValidatorConstraintInterface, ValidatorConstraint, ValidateNested } from "../../node_modules/class-validator";
 import * as cpf from "cpf";
 import { genHash, genPassword } from "../helpers";
 import ExtendedEntity from "./ExtendedEntity";
@@ -68,27 +68,27 @@ export default class Person extends ExtendedEntity {
     @Column("enum", { enum: PersonType, default: PersonType.EMPLOYEE, nullable: false })
     type: PersonType = PersonType.EMPLOYEE;
 
-    @IsOptional()
+    @ValidateNested({each: true})
     @OneToMany(type => Phone, phone => phone.owner, { 
-        cascade: [ "insert", "update" ],
-        nullable: true
+        cascade: [ "insert", "update" ]
     })
     phones?: Phone[];
 
-    @IsOptional()
+    @ValidateNested({each: true})
     @OneToMany(type => Document, document => document.owner, { 
-        cascade: [ "insert", "update" ],
-        nullable: true
+        cascade: [ "insert", "update" ]
     })
     documents?: Document[];
 
     @IsNotEmpty()
+    @ValidateNested({each: true})
     @OneToMany(type => Address, address => address.owner, { 
         cascade: [ "insert", "update" ], 
         nullable: false
     })
     addresses: Address[];
 
+    @ValidateNested({each: true})
     @OneToMany(type => BankAccount, bankAccount => bankAccount.owner, { 
         cascade: [ "insert", "update" ]
     })
@@ -101,6 +101,7 @@ export default class Person extends ExtendedEntity {
     })
     sender?: Company;
 
+    @ValidateNested({each: true})
     @OneToOne(type => Wallet, wallet => wallet.owner, { cascade: [ "insert", "update" ] })
     @JoinColumn()
     wallet: Wallet;

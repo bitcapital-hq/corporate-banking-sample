@@ -16,14 +16,12 @@ export default class AuthService {
     private static instance: AuthService;
 
     private sessionRepository: Repository<Session>;
-    private personService: PersonService;
     private bitCapital: BitCapital;
 
     constructor(options: AuthServiceOptions) {
         this.logger = options.logger;
         this.bitCapital = BitCapital.getInstance();
         this.sessionRepository = getRepository(Session);
-        this.personService = PersonService.getInstance();
     }
 
     public static initialize(options: AuthServiceOptions) {
@@ -34,11 +32,14 @@ export default class AuthService {
     }
 
     public static getInstance(): AuthService {
+        if(!AuthService.instance) {
+            throw new Error("AuthService instance not initialized!");
+        }
         return AuthService.instance;
     }
 
     public async login(email: string, password: string): Promise<Session> {
-        const person = await this.personService.findByEmail(email);
+        const person = await PersonService.getInstance().findByEmail(email);
     
         let session: Session;
         try { 
@@ -105,7 +106,7 @@ export default class AuthService {
         * check/validate token using /me
         */
 
-        const currentUser = await this.personService.findByEmail(session.email);
+        const currentUser = await PersonService.getInstance().findByEmail(session.email);
         await this.bitCapital.authenticateUser(currentUser);
         
         res.setHeader("Authorization", `Bearer ${session.token}`);

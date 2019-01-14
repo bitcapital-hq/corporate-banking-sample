@@ -3,11 +3,16 @@ import { Repository, getRepository } from "../../node_modules/typeorm";
 import { Company, CompanyStatus, Person, Accountable } from "../models";
 import WalletMapper from "../integrations/bitcapital/mappers/WalletMapper";
 import Bitcapital from "bitcapital-core-sdk";
-import { getBitcapitalAPIClient } from "../../config";
 import PersonService from "./PersonService";
+import { LoggerInstance } from "ts-framework-common";
+
+export interface DomainServiceOptions {
+    logger: LoggerInstance;
+  }
 
 export default class DomainService {
 
+    private logger: LoggerInstance;
     private static instance: DomainService;
 
     private companyRepositoty: Repository<Company>;
@@ -15,20 +20,25 @@ export default class DomainService {
     private walletMapper: WalletMapper;
     private bitcapital: Bitcapital;
   
-    constructor() {
+    constructor(options: DomainServiceOptions) {
+        this.logger = options.logger;
         this.companyRepositoty = getRepository(Company);
         this.companyMapper = new CompanyMapper();
         this.walletMapper = new WalletMapper();
     }
   
-    public static initialize() {
-      if(!DomainService.instance)
-        DomainService.instance = new DomainService();
+    public static initialize(options: DomainServiceOptions) {
+        if(!DomainService.instance) {
+            DomainService.instance = new DomainService(options);
+        }
+        return DomainService.instance;
     }
   
     public static getInstance() {
-        DomainService.initialize();
-      return DomainService.instance;
+        if(!DomainService.instance) {
+            throw new Error("DomainService instance not initialized!");
+        }
+        return DomainService.instance;
     }
   
     public async createDomain(domainData: Company): Promise<Company> {
@@ -36,24 +46,47 @@ export default class DomainService {
         return await this.companyRepositoty.save(domainData);
     }
 
-    public async createMediator(domain: Company, personData: Person, password: string): Promise<Person> {
-        const personService: PersonService = PersonService.getInstance();
-        const mediator = await personService.create(domain, personData, password);
+    public async createMediator(
+        domain: Company, 
+        personData: Person, 
+        password: string): Promise<Person> {
 
-        domain.accountable = new Accountable(mediator.id);
-        await this.companyRepositoty.save(domain);
+        let mediator: Person;
+        try {            
+            const personService: PersonService = PersonService.getInstance();
+            mediator = await personService.create(domain, personData, password);
 
-        return await personService.findById(mediator.id);
+            domain.accountable = new Accountable(mediator.id);
+            await this.companyRepositoty.save(domain);
+            mediator = await personService.findById(mediator.id);
+
+        } catch(error) {
+            const message = error.message || error.data && error.data.message;
+            this.logger.error(`Error creating mediator: ${message}`, 
+            personData.toJSON(), error);
+            throw error;
+        }
+
+        return mediator;
     }
 
     public async addRecipient(domain: Company | string, person: Person) {
-        domain = await this.findById(typeof domain === 'string'? domain:domain.id);
+        try {
+            domain = await this.findById(typeof domain === 'string'? domain:domain.id);
 
-        if(!domain || domain.status != CompanyStatus.ACTIVE) 
-          throw new Error("The given domain is invalid or is not active");
-    
-        domain.addRecipient(person);
-        this.companyRepositoty.save(domain);
+            if(!domain || domain.status != CompanyStatus.ACTIVE) 
+            throw new Error("The given domain is invalid or is not active");
+        
+            domain.addRecipient(person);
+            this.companyRepositoty.save(domain);
+
+        } catch(error) {
+            const message = error.message || error.data && error.data.message;
+            this.logger.error(`Error adding recipient to domain: ${message}`, person.toJSON(), error);
+            throw error;
+        }
+
+        return domain;
     }
 
     public async update(updatedCompany: Company): Promise<Company> {

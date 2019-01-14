@@ -68,6 +68,7 @@ export default class Payment {
     public toJSON(): DeepPartial<Payment> {
         return {
             id: this.id,
+            type: this.type,
             externalId: this.externalId,
             sender: this.sender? this.sender.toJSON():this.sender,
             recipient: this.recipient? this.recipient.toJSON():this.recipient,

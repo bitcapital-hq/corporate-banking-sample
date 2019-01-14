@@ -5,6 +5,7 @@ import {
     Transaction, 
     Recipient, 
     BaseModel } from "bitcapital-core-sdk";
+import { Logger } from "ts-framework-common";
 
 export interface WithdrawRequestSchema {
     bankingId: string;
@@ -40,7 +41,9 @@ export class BoletoModel extends BaseModel {
 }
 
 export default class ExtendedPaymentWebService extends PaymentWebService {
-    
+
+  private static logger = Logger.getInstance();
+
     constructor(options: PaymentWebServiceOptions) {
         super(options);
     }
@@ -68,7 +71,7 @@ export default class ExtendedPaymentWebService extends PaymentWebService {
       public async issueBankSlip(request: BoletoRequestSchema): Promise<BoletoModel> {
         const { amount, expiresAt } = request;
     
-        const url = `/payments/boleto`;
+        const url = `/payments/boleto/emit`;
         const body = { amount, expiresAt };
         const signature = RequestUtil.sign(this.options.clientSecret, {
           url,

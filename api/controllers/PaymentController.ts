@@ -48,6 +48,7 @@ export default class PaymentController {
       .findPaymentByPeriod(wallet, filters, offset, limit);
   
     } catch(error) {
+      console.dir(error);
       if(error instanceof HttpError) throw error;
       throw new HttpError(`Error trying to retrieve payments of the given period: ${error.data.message}`, 
       HttpCode.Server.INTERNAL_SERVER_ERROR);
@@ -114,7 +115,7 @@ export default class PaymentController {
     return res.success( payment.toJSON() );
   }
 
-  @Post('/', [Auth.authorize])
+  @Post('/payments', [Auth.authorize])
   static async payment(req: ExtendedRequest, res: BaseResponse) {
     const { recipientId, amount }: { recipientId: string; amount: string } = req.body;
     const [ domain, currentUser ] = [ req.core.domain as Company, req.user as Person ];
@@ -193,12 +194,6 @@ export default class PaymentController {
     const { amount, expiresAt }: { amount: string, expiresAt: Date } = req.body;
     const [ domain, currentUser ] = [ req.core.domain as Company, req.user as Person ];
     
-    const accountable = await DomainService.getInstance().findAccountable(domain.id);
-    if(currentUser.id != accountable.id) {
-        throw new HttpError("Only the company's accountable can do this", 
-        HttpCode.Client.FORBIDDEN);
-    }
-
     let bankSlip: Boleto;
     try {
       bankSlip = await PaymentService.getInstance()
@@ -246,13 +241,6 @@ export default class PaymentController {
     const { id }: { id: string } = req.params;
     const [ domain, currentUser ] = [ req.core.domain as Company, req.user as Person ];
     
-    const accountable = await DomainService.getInstance()
-    .findAccountable(domain.id);
-    if(currentUser.id != accountable.id) {
-        throw new HttpError("Only the company's accountable can do this", 
-        HttpCode.Client.FORBIDDEN);
-    }
-
     const paymentService = PaymentService.getInstance();
     let bankSlip: Boleto;
     try {
