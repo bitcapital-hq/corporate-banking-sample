@@ -1,50 +1,70 @@
 import { Repository, getRepository } from "../../node_modules/typeorm";
 import { BaseRequest, BaseResponse, HttpCode, HttpError } from 'ts-framework';
 import { Person, Session, Company } from "../models";
-import { authenticateUser } from "../../config";
+import { default as BitCapital } from "../BitCapital";
 import PersonService from "./PersonService";
 import DomainService from "./DomainService";
+import { LoggerInstance } from "ts-framework-common";
 
+export interface AuthServiceOptions {
+    logger: LoggerInstance;
+}
+  
 export default class AuthService {
 
-    private sessionRepository: Repository<Session>;
+    private logger: LoggerInstance;
     private static instance: AuthService;
-    private personService: PersonService;
 
-    constructor() {
+    private sessionRepository: Repository<Session>;
+    private personService: PersonService;
+    private bitCapital: BitCapital;
+
+    constructor(options: AuthServiceOptions) {
+        this.logger = options.logger;
+        this.bitCapital = BitCapital.getInstance();
         this.sessionRepository = getRepository(Session);
         this.personService = PersonService.getInstance();
     }
 
-    private static initialize() {
-        AuthService.instance = new AuthService();
+    public static initialize(options: AuthServiceOptions) {
+        if(!AuthService.instance) {
+            AuthService.instance = new AuthService(options);
+        }
+        return AuthService.instance;
     }
 
     public static getInstance(): AuthService {
-        if(!AuthService.instance)
-            AuthService.initialize();
-        
         return AuthService.instance;
     }
 
     public async login(email: string, password: string): Promise<Session> {
         const person = await this.personService.findByEmail(email);
     
-        if(!person) 
-          throw new HttpError("Not found", HttpCode.Client.NOT_FOUND);
-    
-        if(!person.validatePassword(password))
-          throw new HttpError("Unauthorized: invalid password", 
-          HttpCode.Client.UNAUTHORIZED);
-    
-        const user = await authenticateUser(person);
-    
-        const session = new Session({
-          email: person.email,
-          token: user.credentials.accessToken
-        });
-    
-        return await this.sessionRepository.save(session);
+        let session: Session;
+        try { 
+            if(!person) 
+            throw new HttpError("Not found", HttpCode.Client.NOT_FOUND);
+        
+            if(!(await person.validatePassword(password))) {
+                throw new HttpError("Unauthorized: invalid password", 
+                HttpCode.Client.UNAUTHORIZED);
+            }
+        
+            const user = await this.bitCapital.authenticateUser(person);
+        
+            session = new Session({
+                email: person.email,
+                token: user.credentials.accessToken
+            });
+            await this.sessionRepository.save(session);
+
+        } catch(error) {
+            const message = error.message || error.data && error.data.message;
+            this.logger.error(`Error creating user session: ${message}`, person.email, error);
+            throw error;
+        }
+  
+        return session;
       }
 
       public async logout(req: BaseRequest, res: BaseResponse): Promise<boolean> {
@@ -86,7 +106,7 @@ export default class AuthService {
         */
 
         const currentUser = await this.personService.findByEmail(session.email);
-        await authenticateUser(currentUser);
+        await this.bitCapital.authenticateUser(currentUser);
         
         res.setHeader("Authorization", `Bearer ${session.token}`);
 
