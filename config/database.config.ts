@@ -1,12 +1,12 @@
 export default {
   type: "postgres",
-  host: process.env.DATABASE_HOST || "localhost",
-  port: parseInt(process.env.DATABASE_PORT || "5432", 10),
-  username: process.env.DATABASE_USER || "ricardo",
-  password: process.env.DATABASE_PASSWORD || "ricardo",
-  database: process.env.DATABASE_NAME || "ricardo",
+  host: process.env.DATABASE_HOST,
+  port: parseInt(process.env.DATABASE_PORT, 10),
+  username: process.env.DATABASE_USER,
+  password: process.env.DATABASE_PASSWORD,
+  database: process.env.DATABASE_NAME,
   synchronize: true,
-  logging: ["error", "query"],
+  logging: ["error"],
 
   // IMPORTANT: Path should be relative to root
   entities: ["./api/models/**/*.ts"],

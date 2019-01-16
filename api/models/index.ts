@@ -1,1 +1,12 @@
-export { default as Wallet } from "./Wallet";
+export { default as Person, PersonStatus, PersonType } from "./Person";
+export { default as Accountable } from "./Accountable";
+export { default as Boleto, BoletoStatus } from "./Boleto";
+export { default as Payment, PaymentType, PaymentStatus } from "./Payment";
+export { default as Wallet, WalletStatus } from "./Wallet";
+export { default as Address, AddressType } from "./Address";
+export { default as Phone, PhoneType } from "./Phone";
+export { default as BankAccount } from "./BankAccount";
+export { default as Document, DocumentStatus, DocumentType } from "./Document";
+export { default as Company, CompanyStatus } from "./Company";
+export { default as Session } from "./Session";
+export { default as Salary } from "./Salary";
